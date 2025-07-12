@@ -9,8 +9,12 @@ services:
     depends_on:
       - mongodb
       - rag_api
-    image: ghcr.io/danny-avila/librechat-dev:latest
-    restart: always
+    #image: ghcr.io/danny-avila/librechat-dev:latest
+    build:
+       context: .
+       dockerfile: Dockerfile.multi
+       target: api-build
+    restart: no
     user: "${UID}:${GID}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
