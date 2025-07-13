@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
+import { v4 } from 'uuid';
 import { ChevronLeft, ChevronRight, FileText, Video, Link, File, BookOpen, Upload, Check } from 'lucide-react';
 import { useLocalize, useAuthContext } from '~/hooks';
-import { useToastContext } from '~/Providers';
+import { useToastContext, useChatContext } from '~/Providers';
 import { useQueryClient } from '@tanstack/react-query';
-import { QueryKeys } from 'librechat-data-provider';
+import { QueryKeys, FileSources } from 'librechat-data-provider';
+import useUpdateFiles from '~/hooks/Files/useUpdateFiles';
+import type { ExtendedFile } from '~/common';
 
 interface Course {
   id: number;
@@ -45,6 +48,8 @@ const CanvasPanel = () => {
   const localize = useLocalize();
   const { token } = useAuthContext();
   const { showToast } = useToastContext();
+  const { files, setFiles } = useChatContext();
+  const { addFile } = useUpdateFiles(setFiles);
   const queryClient = useQueryClient();
   const [courses, setCourses] = useState<Course[]>([]);
   const [modules, setModules] = useState<Module[]>([]);
@@ -164,11 +169,28 @@ const CanvasPanel = () => {
       
       setUploadedFiles(prev => new Set(prev).add(fileId));
       
+      // Add file to current chat as attachment
+      if (result.originalFile) {
+        const extendedFile: ExtendedFile = {
+          file_id: result.file_id || v4(),
+          filename: result.originalFile.display_name,
+          type: result.originalFile.content_type || 'application/octet-stream',
+          size: result.originalFile.size || 0,
+          filepath: result.filepath,
+          progress: 1,
+          source: FileSources.canvas,
+          attached: true,
+          embedded: true,
+        };
+        
+        addFile(extendedFile);
+      }
+      
       // Invalidate queries to auto-refresh files list
       queryClient.invalidateQueries([QueryKeys.files]);
       
       showToast({
-        message: `File "${result.originalFile?.display_name || 'file'}" uploaded successfully to file search!`,
+        message: `File "${result.originalFile?.display_name || 'file'}" uploaded successfully to file search and added to chat!`,
         status: 'success',
       });
     } catch (error) {
