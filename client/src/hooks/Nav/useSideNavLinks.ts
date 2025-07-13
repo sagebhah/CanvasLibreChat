@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { MessageSquareQuote, ArrowRightToLine, Settings2, Database, Bookmark } from 'lucide-react';
+import { MessageSquareQuote, ArrowRightToLine, Settings2, Database, Bookmark, GraduationCap } from 'lucide-react';
 import {
   isAssistantsEndpoint,
   isAgentsEndpoint,
@@ -15,6 +15,7 @@ import BookmarkPanel from '~/components/SidePanel/Bookmarks/BookmarkPanel';
 import MemoryViewer from '~/components/SidePanel/Memories/MemoryViewer';
 import PanelSwitch from '~/components/SidePanel/Builder/PanelSwitch';
 import PromptsAccordion from '~/components/Prompts/PromptsAccordion';
+import CanvasPanel from '~/components/SidePanel/Canvas/CanvasPanel';
 import { Blocks, MCPIcon, AttachmentIcon } from '~/components/svg';
 import Parameters from '~/components/SidePanel/Parameters/Panel';
 import FilesPanel from '~/components/SidePanel/Files/Panel';
@@ -151,6 +152,15 @@ export default function useSideNavLinks({
         Component: BookmarkPanel,
       });
     }
+
+    // Add Canvas LMS panel
+    links.push({
+      title: 'com_sidepanel_canvas',
+      label: '',
+      icon: GraduationCap,
+      id: 'canvas',
+      Component: CanvasPanel,
+    });
 
     if (
       startupConfig?.mcpServers &&
