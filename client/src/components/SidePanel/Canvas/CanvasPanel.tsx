@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, FileText, Video, Link, File, BookOpen } from 'lucide-react';
-import { useLocalize } from '~/hooks';
+import { ChevronLeft, ChevronRight, FileText, Video, Link, File, BookOpen, Upload, Check } from 'lucide-react';
+import { useLocalize, useAuthContext } from '~/hooks';
+import { useToastContext } from '~/Providers';
+import { useQueryClient } from '@tanstack/react-query';
+import { QueryKeys } from 'librechat-data-provider';
 
 interface Course {
   id: number;
@@ -40,6 +43,9 @@ type ViewType = 'courses' | 'modules' | 'items';
 
 const CanvasPanel = () => {
   const localize = useLocalize();
+  const { token } = useAuthContext();
+  const { showToast } = useToastContext();
+  const queryClient = useQueryClient();
   const [courses, setCourses] = useState<Course[]>([]);
   const [modules, setModules] = useState<Module[]>([]);
   const [items, setItems] = useState<ModuleItem[]>([]);
@@ -48,6 +54,8 @@ const CanvasPanel = () => {
   const [currentView, setCurrentView] = useState<ViewType>('courses');
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [selectedModule, setSelectedModule] = useState<Module | null>(null);
+  const [uploadingFiles, setUploadingFiles] = useState<Set<number>>(new Set());
+  const [uploadedFiles, setUploadedFiles] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     const fetchCourses = async () => {
@@ -125,6 +133,56 @@ const CanvasPanel = () => {
       setCurrentView('courses');
       setSelectedCourse(null);
       setModules([]);
+    }
+  };
+
+// Remove the old uploadMutation - we'll handle this differently
+
+  const handleFileUpload = async (fileId: number) => {
+    try {
+      setUploadingFiles(prev => new Set(prev).add(fileId));
+      
+      // Use backend to proxy the file download and upload (avoids CORS issues)
+      const response = await fetch(`/api/canvas/files/${fileId}/download-and-upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          endpoint: 'openAI',
+          tool_resource: 'file_search',
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Upload failed');
+      }
+
+      const result = await response.json();
+      
+      setUploadedFiles(prev => new Set(prev).add(fileId));
+      
+      // Invalidate queries to auto-refresh files list
+      queryClient.invalidateQueries([QueryKeys.files]);
+      
+      showToast({
+        message: `File "${result.originalFile?.display_name || 'file'}" uploaded successfully to file search!`,
+        status: 'success',
+      });
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      showToast({
+        message: `Failed to upload file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        status: 'error',
+      });
+    } finally {
+      setUploadingFiles(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(fileId);
+        return newSet;
+      });
     }
   };
 
@@ -233,6 +291,10 @@ const CanvasPanel = () => {
     <div className="space-y-2">
       {items.map((item) => {
         const IconComponent = getItemIcon(item.type);
+        const isFile = item.type === 'File';
+        const isUploading = uploadingFiles.has(item.content_id);
+        const isUploaded = uploadedFiles.has(item.content_id);
+        
         return (
           <div
             key={item.id}
@@ -249,6 +311,26 @@ const CanvasPanel = () => {
                   {item.type.replace(/([A-Z])/g, ' $1').trim()}
                 </div>
               </div>
+              {isFile && (
+                <div className="flex-shrink-0">
+                  {isUploaded ? (
+                    <div className="flex items-center space-x-1 text-green-600">
+                      <Check className="h-4 w-4" />
+                      <span className="text-xs">Uploaded</span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleFileUpload(item.content_id)}
+                      disabled={isUploading}
+                      className="flex items-center space-x-1 px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      title="Upload to File Search"
+                    >
+                      <Upload className={`h-3 w-3 ${isUploading ? 'animate-spin' : ''}`} />
+                      <span>{isUploading ? 'Uploading...' : 'Upload'}</span>
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         );
